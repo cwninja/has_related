@@ -60,9 +60,10 @@ module HasRelated
     end
   end
 
-  def self.sim_pearson(prefs, items, person1, person2, total_people)
-    n = items.length
+  def self.sim_pearson(prefs, item1, item2, total_people)
+    people = prefs[item1].keys & prefs[item2].keys
+    n = people.length
     return 0 if n == 0
-    Optimizations.c_sim_pearson(items, n, prefs[person1], prefs[person2], total_people)
+    Optimizations.c_sim_pearson(people, n, prefs[item1], prefs[item2], total_people)
   end
 end

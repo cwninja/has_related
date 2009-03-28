@@ -11,7 +11,7 @@ class DatasetGenerationTest < Test::Unit::TestCase
       "hamsters" => {"vet" => 1, "vet2" => 1},
       "bannanas" => {}
     }
-    rv = HasRelated.generate_dataset(users, prefs)
+    rv = HasRelated.generate_dataset(prefs, users.size)
     assert rv["beans"].find{|v| v.last == "carrots" }.first > 0
     assert_nil rv["beans"].find{|v| v.last == "hamsters" }
   end

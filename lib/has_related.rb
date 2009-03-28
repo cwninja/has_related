@@ -16,7 +16,8 @@ module HasRelated
 
   class << self
 
-    def sim_pearson(prefs, people, item1, item2, total_people)
+    def sim_pearson(prefs, item1, item2, total_people)
+      people = prefs[item].keys & prefs[other].keys
       n = total_people
       return 0 if n == 0
 
@@ -41,7 +42,8 @@ module HasRelated
     end
 
     def similar_items(item, count, min_score = 0)
-      item.class.find_all_by_id(similar_item_ids(item, count, min_score)) || []
+      ids = similar_item_ids(item, nil, min_score)
+      (item.class.find_all_by_id(ids) || []).sort_by{|item| ids.index(item.id) }.first(count)
     end
 
     def file_for_class(klass)
@@ -56,36 +58,48 @@ module HasRelated
 
       rankings = rankings.select {|score, _| score > min_score }
       rankings = rankings.sort_by {|score, _| -score}
-      rankings = rankings[0..(count - 1)]
+      rankings = rankings[0..(count - 1)] if count
       rankings.map{|_, id| id}
     end
 
-    def generate_dataset(users, prefs, &block)
-      total_people = users.size
+    def generate_dataset(prefs, total_people = nil, &block)
+      all_results = {}
+      total_people ||= prefs.inject(Set.new){|acc, (k, users)| acc += users.keys; acc }.size
+
       items = prefs.keys
-      results = {}
-      items.each do |item|
+
+      for item in items
         agregated_recomendation_map = []
+
         items.each do |other|
-          users = prefs[item].keys & prefs[other].keys
-          if other != item && (similarity = sim_pearson(prefs, users, item, other, total_people)) > 0
-            agregated_recomendation_map << [similarity, other]
-          end
+          next unless other != item && (similarity = sim_pearson(prefs, item, other, total_people)) > 0
+          agregated_recomendation_map << [similarity, other]
         end
 
-        if agregated_recomendation_map.any?
-          agregated_recomendation_map.sort!
-          results[item] = agregated_recomendation_map.reverse.first(9)
-        end
+        all_results[item] = agregated_recomendation_map.sort.reverse.first(16) if agregated_recomendation_map.any?
+
         yield [item, agregated_recomendation_map] if block_given?
       end
-      results
+
+      return all_results
     end
 
-    def dump_dataset(users, prefs, klass, &block)
+    def dump_dataset(prefs, total_people, klass, &block)
       FileUtils.mkdir_p(File.dirname(file_for_class(klass))) unless File.directory? File.dirname(file_for_class(klass))
+      dataset = generate_dataset(prefs, total_people, &block)
       File.open(file_for_class(klass), "w") do |io|
-        dataset = generate_dataset(users, prefs, &block)
+        Marshal.dump(dataset, io)
+      end
+    end
+
+    def dump_grouped_datasets(grouped_prefs, grouped_total_people, klass, &block)
+      FileUtils.mkdir_p(File.dirname(file_for_class(klass))) unless File.directory? File.dirname(file_for_class(klass))
+      dataset = Hash.new
+      grouped_prefs.each do |id, prefs|
+        puts "Doing #{id}"
+        dataset.merge! generate_dataset(prefs, grouped_total_people[id], &block)
+      end
+      File.open(file_for_class(klass), "w") do |io|
         Marshal.dump(dataset, io)
       end
     end
