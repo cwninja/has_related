@@ -8,7 +8,7 @@ module HasRelated
     def has_related(method_name = "related_items")
       class_eval do
         define_method method_name do
-          HasRelated.similar_items(self, options)
+          HasRelated.similar_items(self, count = 10)
         end
       end
     end
@@ -41,17 +41,17 @@ module HasRelated
     end
 
     def similar_items(item, count, min_score = 0)
-      item.class.find_by_id(similar_item_ids(item, count, min_score))
+      item.class.find_all_by_id(similar_item_ids(item, count, min_score)) || []
     end
 
     def file_for_class(klass)
-      File.join(Rails.root, "db", "similar_items_datasets", klass.to_s.underscore + ".yml")
+      File.join(Rails.root, "db", "similar_items_datasets", klass.to_s.underscore + ".bin")
     end
 
     def similar_item_ids(item, count, min_score = 0)
       @dataset ||= {}
-      @dataset[item.class] ||= YAML.load(File.open(file_for_class(item.class)))
-      rankings = dataset[item.id]
+      @dataset[item.class.to_s] ||= Marshal.load(File.open(file_for_class(item.class)))
+      rankings = @dataset[item.class.to_s][item.id]
       return [] unless rankings
 
       rankings = rankings.select {|score, _| score > min_score }
@@ -69,16 +69,15 @@ module HasRelated
         items.each do |other|
           users = prefs[item].keys & prefs[other].keys
           if other != item && (similarity = sim_pearson(prefs, users, item, other, total_people)) > 0
-            puts "#{item} => #{other} == #{similarity}"
             agregated_recomendation_map << [similarity, other]
           end
         end
 
         if agregated_recomendation_map.any?
-          agregated_recomendation_map.sort!{|a,b| b.first <=> a.first }
-          puts "####################################################################"
-          results[item] = agregated_recomendation_map
+          agregated_recomendation_map.sort!
+          results[item] = agregated_recomendation_map.reverse.first(9)
         end
+        yield [item, agregated_recomendation_map] if block_given?
       end
       results
     end
@@ -86,7 +85,8 @@ module HasRelated
     def dump_dataset(users, prefs, klass, &block)
       FileUtils.mkdir_p(File.dirname(file_for_class(klass))) unless File.directory? File.dirname(file_for_class(klass))
       File.open(file_for_class(klass), "w") do |io|
-        generate_dataset(users, prefs, &block).to_yaml(io)
+        dataset = generate_dataset(users, prefs, &block)
+        Marshal.dump(dataset, io)
       end
     end
   end
