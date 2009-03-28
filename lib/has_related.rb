@@ -6,9 +6,9 @@ module HasRelated
 
   module ClassMethods
     def has_related(method_name = "related_items")
-      options[:on_class].class_eval do
+      class_eval do
         define_method method_name do
-          Logic.similar_items(self, options)
+          HasRelated.similar_items(self, options)
         end
       end
     end
@@ -16,8 +16,8 @@ module HasRelated
 
   class << self
 
-    def sim_pearson(prefs, people, item1, item2)
-      n = people.length
+    def sim_pearson(prefs, people, item1, item2, total_people)
+      n = total_people
       return 0 if n == 0
 
       sum1 = sum2 = sum1Sq = sum2Sq = pSum = 0.0
@@ -60,22 +60,33 @@ module HasRelated
       rankings.map{|_, id| id}
     end
 
-    def generate_dataset(users, prefs)
+    def generate_dataset(users, prefs, &block)
+      total_people = users.size
       items = prefs.keys
       results = {}
       items.each do |item|
-        agregated_recomendation_map = items.reject{|other| other == item }.map{|other|
-          [sim_pearson(prefs, users, item, other), other]
-        }.sort_by{|score, _| -score}
-        results[item] = agregated_recomendation_map
+        agregated_recomendation_map = []
+        items.each do |other|
+          users = prefs[item].keys & prefs[other].keys
+          if other != item && (similarity = sim_pearson(prefs, users, item, other, total_people)) > 0
+            puts "#{item} => #{other} == #{similarity}"
+            agregated_recomendation_map << [similarity, other]
+          end
+        end
+
+        if agregated_recomendation_map.any?
+          agregated_recomendation_map.sort!{|a,b| b.first <=> a.first }
+          puts "####################################################################"
+          results[item] = agregated_recomendation_map
+        end
       end
       results
     end
 
-    def dump_dataset(users, prefs, klass)
-      FileUtils.mkdir_p(File.dirname(file_for_class(klass)))
+    def dump_dataset(users, prefs, klass, &block)
+      FileUtils.mkdir_p(File.dirname(file_for_class(klass))) unless File.directory? File.dirname(file_for_class(klass))
       File.open(file_for_class(klass), "w") do |io|
-        generate_dataset(users, prefs).to_yaml(io)
+        generate_dataset(users, prefs, &block).to_yaml(io)
       end
     end
   end

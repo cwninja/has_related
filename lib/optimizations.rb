@@ -5,7 +5,7 @@ module HasRelated
       inline do |builder|
         builder.include '<math.h>'
         builder.c <<-EOC
-        double c_sim_pearson(VALUE items, int n, VALUE prefs1, VALUE prefs2)
+        double c_sim_pearson(VALUE items, int n, VALUE prefs1, VALUE prefs2, int total_people)
         {
           double sum1 = 0.0;
           double sum2 = 0.0;
@@ -44,8 +44,8 @@ module HasRelated
 
           double num;
           double den;
-          num = pSum - ( ( sum1 * sum2 ) / n );
-          den = sqrt( ( sum1Sq - ( pow(sum1, 2) ) / n ) * ( sum2Sq - ( pow(sum2, 2) ) / n ) );
+          num = pSum - ( ( sum1 * sum2 ) / total_people );
+          den = sqrt( ( sum1Sq - ( pow(sum1, 2) ) / total_people ) * ( sum2Sq - ( pow(sum2, 2) ) / total_people ) );
           if(den == 0){
             return 0.0;
           } else {
@@ -60,9 +60,9 @@ module HasRelated
     end
   end
 
-  def self.sim_pearson(prefs, items, person1, person2)
+  def self.sim_pearson(prefs, items, person1, person2, total_people)
     n = items.length
     return 0 if n == 0
-    Optimizations.c_sim_pearson(items, n, prefs[person1], prefs[person2])
+    Optimizations.c_sim_pearson(items, n, prefs[person1], prefs[person2], total_people)
   end
 end
