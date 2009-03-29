@@ -51,14 +51,23 @@ module HasRelated
     end
 
     def similar_item_ids(item, count)
+      data = [dataset(item.class)]
+      all_related_ids = (data[item.id] || []).map{|_, id| id}
+      if count
+        all_related_ids.first(count)
+      else
+        all_related_ids
+      end
+    end
+    
+    def dataset(klass)
       @dataset ||= {}
-      return @dataset[item.class.to_s] if @dataset[item.class.to_s]
-
-      return @dataset[item.class.to_s] = [] unless File.readable? file_for_class(item.class)
-      @dataset[item.class.to_s] = Marshal.load(File.open(file_for_class(item.class)))
-      return [] unless @dataset[item.class.to_s].is_a? Hash and rankings = @dataset[item.class.to_s][item.id]
-      rankings = rankings.first(count) if count
-      rankings.map{|_, id| id}
+      return @dataset[klass.to_s] if @dataset[klass.to_s]
+      if File.readable? file_for_class(klass)
+        @dataset[klass.to_s] = Marshal.load(File.open(file_for_class(klass)))
+      else
+        @dataset[klass.to_s] = []
+      end
     end
 
     def generate_dataset(prefs, total_people = nil, &block)
