@@ -7,8 +7,8 @@ module HasRelated
   module ClassMethods
     def has_related(method_name = "related_items")
       class_eval do
-        define_method method_name do
-          HasRelated.similar_items(self, count = 10)
+        define_method method_name do |count|
+          HasRelated.similar_items(self, count)
         end
       end
     end
@@ -41,13 +41,13 @@ module HasRelated
       num / den
     end
 
+    def file_for_class(klass)
+      File.join(Rails.root, "db", "similar_items_datasets", klass.to_s.underscore + ".bin")
+    end
+
     def similar_items(item, count, min_score = 0)
       ids = similar_item_ids(item, nil, min_score)
       (item.class.find_all_by_id(ids) || []).sort_by{|item| ids.index(item.id) }.first(count)
-    end
-
-    def file_for_class(klass)
-      File.join(Rails.root, "db", "similar_items_datasets", klass.to_s.underscore + ".bin")
     end
 
     def similar_item_ids(item, count, min_score = 0)
@@ -85,20 +85,26 @@ module HasRelated
     end
 
     def dump_dataset(prefs, total_people, klass, &block)
-      FileUtils.mkdir_p(File.dirname(file_for_class(klass))) unless File.directory? File.dirname(file_for_class(klass))
+      ensure_data_dir_exists!(klass)
       dataset = generate_dataset(prefs, total_people, &block)
-      File.open(file_for_class(klass), "w") do |io|
-        Marshal.dump(dataset, io)
-      end
+      write_dataset_to_disk(dataset, klass)
     end
 
     def dump_grouped_datasets(grouped_prefs, grouped_total_people, klass, &block)
-      FileUtils.mkdir_p(File.dirname(file_for_class(klass))) unless File.directory? File.dirname(file_for_class(klass))
+      ensure_data_dir_exists!(klass)
       dataset = Hash.new
       grouped_prefs.each do |id, prefs|
-        puts "Doing #{id}"
         dataset.merge! generate_dataset(prefs, grouped_total_people[id], &block)
       end
+      write_dataset_to_disk(dataset, klass)
+    end
+
+  private
+    def ensure_data_dir_exists!(klass)
+      FileUtils.mkdir_p(File.dirname(file_for_class(klass))) unless File.directory? File.dirname(file_for_class(klass))
+    end
+
+    def write_dataset_to_disk(dataset, klass)
       File.open(file_for_class(klass), "w") do |io|
         Marshal.dump(dataset, io)
       end
