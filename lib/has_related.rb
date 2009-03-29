@@ -51,7 +51,7 @@ module HasRelated
     end
 
     def similar_item_ids(item, count)
-      data = [dataset(item.class)]
+      data = dataset(item.class)
       all_related_ids = (data[item.id] || []).map{|_, id| id}
       if count
         all_related_ids.first(count)
