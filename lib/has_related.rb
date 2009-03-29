@@ -45,20 +45,19 @@ module HasRelated
       File.join(Rails.root, "db", "similar_items_datasets", klass.to_s.underscore + ".bin")
     end
 
-    def similar_items(item, count, min_score = 0)
-      ids = similar_item_ids(item, nil, min_score)
+    def similar_items(item, count)
+      ids = similar_item_ids(item, nil)
       (item.class.find_all_by_id(ids) || []).sort_by{|item| ids.index(item.id) }.first(count)
     end
 
-    def similar_item_ids(item, count, min_score = 0)
+    def similar_item_ids(item, count)
       @dataset ||= {}
-      @dataset[item.class.to_s] ||= Marshal.load(File.open(file_for_class(item.class)))
-      rankings = @dataset[item.class.to_s][item.id]
-      return [] unless rankings
+      return @dataset[item.class.to_s] if @dataset[item.class.to_s]
 
-      rankings = rankings.select {|score, _| score > min_score }
-      rankings = rankings.sort_by {|score, _| -score}
-      rankings = rankings[0..(count - 1)] if count
+      return @dataset[item.class.to_s] = [] unless File.readable? file_for_class(item.class)
+      @dataset[item.class.to_s] = Marshal.load(File.open(file_for_class(item.class)))
+      return [] unless @dataset[item.class.to_s].is_a? Hash and rankings = @dataset[item.class.to_s][item.id]
+      rankings = rankings.first(count) if count
       rankings.map{|_, id| id}
     end
 
