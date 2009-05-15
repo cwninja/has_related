@@ -16,29 +16,18 @@ module HasRelated
 
   class << self
 
-    def sim_pearson(prefs, item1, item2, total_people)
-      people = prefs[item].keys & prefs[other].keys
-      n = total_people
-      return 0 if n == 0
+    def similarity(prefs, item1, item2)
+      people = prefs[item1].keys & prefs[item2].keys
 
-      sum1 = sum2 = sum1Sq = sum2Sq = pSum = 0.0
+      sum = 0.0
 
       people.each do |person|
         prefs1_item = prefs[item1][person] || 0.0
         prefs2_item = prefs[item2][person] || 0.0
-        sum1   += prefs1_item
-        sum2   += prefs2_item
-        sum1Sq += prefs1_item ** 2
-        sum2Sq += prefs2_item ** 2
-        pSum   += prefs2_item * prefs1_item
+        sum += prefs2_item * prefs1_item
       end
 
-      num = pSum - ( ( sum1 * sum2 ) / n )
-      den = Math.sqrt( ( sum1Sq - ( sum1 ** 2 ) / n ) * ( sum2Sq - ( sum2 ** 2 ) / n ) )
-
-      return 0 if den == 0
-
-      num / den
+      sum / (prefs[item1].keys | prefs[item2].keys).size
     end
 
     def file_for_class(klass)
@@ -46,7 +35,7 @@ module HasRelated
     end
 
     def similar_items(item, count)
-      ids = similar_item_ids(item, nil)
+      ids = similar_item_ids(item, count)
       (item.class.find_all_by_id(ids) || []).sort_by{|item| ids.index(item.id) }.first(count)
     end
 
@@ -59,7 +48,7 @@ module HasRelated
         all_related_ids
       end
     end
-    
+
     def dataset(klass)
       @dataset ||= {}
       return @dataset[klass.to_s] if @dataset[klass.to_s]
@@ -70,21 +59,27 @@ module HasRelated
       end
     end
 
-    def generate_dataset(prefs, total_people = nil, &block)
-      all_results = {}
-      total_people ||= prefs.inject(Set.new){|acc, (k, users)| acc += users.keys; acc }.size
+    def similar_items_dataset(klass_name)
+      @similar_items_dataset ||= {}
+      return @similar_items_dataset[klass_name] if @similar_items_dataset[klass_name]
 
+      return @similar_items_dataset[klass_name] = {} unless File.readable? file_for_class(klass_name)
+      @similar_items_dataset[klass_name] = Marshal.load(File.open(file_for_class(klass_name)))
+    end
+
+    def generate_dataset(prefs, &block)
+      all_results = {}
       items = prefs.keys
 
       for item in items
         agregated_recomendation_map = []
 
         items.each do |other|
-          next unless other != item && (similarity = sim_pearson(prefs, item, other, total_people)) > 0
-          agregated_recomendation_map << [similarity, other]
+          next unless other != item && (item_similarity = similarity(prefs, item, other)) > 0
+          agregated_recomendation_map << [item_similarity, other]
         end
 
-        all_results[item] = agregated_recomendation_map.sort.reverse.first(16) if agregated_recomendation_map.any?
+        all_results[item] = agregated_recomendation_map.sort_by{|count, item| -count}.first(16) if agregated_recomendation_map.any?
 
         yield [item, agregated_recomendation_map] if block_given?
       end
@@ -98,11 +93,11 @@ module HasRelated
       write_dataset_to_disk(dataset, klass)
     end
 
-    def dump_grouped_datasets(grouped_prefs, grouped_total_people, klass, &block)
+    def dump_grouped_datasets(grouped_prefs, klass, &block)
       ensure_data_dir_exists!(klass)
       dataset = Hash.new
       grouped_prefs.each do |id, prefs|
-        dataset.merge! generate_dataset(prefs, grouped_total_people[id], &block)
+        dataset.merge! generate_dataset(prefs, &block)
       end
       write_dataset_to_disk(dataset, klass)
     end

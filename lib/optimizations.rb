@@ -5,52 +5,40 @@ module HasRelated
       inline do |builder|
         builder.include '<math.h>'
         builder.c <<-EOC
-        double c_sim_pearson(VALUE items, int n, VALUE prefs1, VALUE prefs2, int total_people)
+        /*
+          people.each do |person|
+            prefs1_item = prefs[item1][person] || 0.0
+            prefs2_item = prefs[item2][person] || 0.0
+            sum += prefs2_item * prefs1_item
+          end
+
+          sum / item_count
+        */
+        double c_similarity(VALUE people, int people_count, int item_count, VALUE item1_prefs, VALUE item2_prefs)
         {
-          double sum1 = 0.0;
-          double sum2 = 0.0;
-          double sum1Sq = 0.0;
-          double sum2Sq = 0.0;
-          double pSum = 0.0;
+          double sum = 0.0;
 
-          VALUE *items_a  = RARRAY(items) ->ptr;
-
+          VALUE * people_a = RARRAY(people)->ptr;
           int i;
-          for(i=0; i<n; i++) {
-            VALUE prefs1_item_ob;
-            VALUE prefs2_item_ob;
+          for(i = 0; i < people_count; i++) {
+            VALUE person = people_a[i];
+            
+            VALUE item1_person_score_ob;
+            VALUE item2_person_score_ob;
 
-            double prefs1_item;
-            double prefs2_item;
+            double item1_person_score = 0.0;
+            double item2_person_score = 0.0;
 
-            if (!st_lookup(RHASH(prefs1)->tbl, items_a[i], &prefs1_item_ob)) {
-              prefs1_item = 0.0;
-            } else {
-              prefs1_item = NUM2DBL(prefs1_item_ob);
-            }
+            if (st_lookup(RHASH(item1_prefs)->tbl, person, &item1_person_score_ob))
+              item1_person_score = NUM2DBL(item1_person_score_ob);
 
-            if (!st_lookup(RHASH(prefs2)->tbl, items_a[i], &prefs2_item_ob)) {
-              prefs2_item = 0.0;
-            } else {
-              prefs2_item = NUM2DBL(prefs2_item_ob);
-            }
-
-            sum1   += prefs1_item;
-            sum2   += prefs2_item;
-            sum1Sq += pow(prefs1_item, 2);
-            sum2Sq += pow(prefs2_item, 2);
-            pSum   += prefs2_item * prefs1_item;
+            if (st_lookup(RHASH(item2_prefs)->tbl, person, &item2_person_score_ob))
+              item2_person_score = NUM2DBL(item2_person_score_ob);
+            
+            sum += item1_person_score * item2_person_score;
           }
 
-          double num;
-          double den;
-          num = pSum - ( ( sum1 * sum2 ) / total_people );
-          den = sqrt( ( sum1Sq - ( pow(sum1, 2) ) / total_people ) * ( sum2Sq - ( pow(sum2, 2) ) / total_people ) );
-          if(den == 0){
-            return 0.0;
-          } else {
-            return num / den;
-          }
+          return sum / item_count;
         }
         EOC
       end
@@ -60,10 +48,17 @@ module HasRelated
     end
   end
 
-  def self.sim_pearson(prefs, item1, item2, total_people)
+  def self.similarity(prefs, item1, item2)
     people = prefs[item1].keys & prefs[item2].keys
-    n = people.length
-    return 0 if n == 0
-    Optimizations.c_sim_pearson(people, n, prefs[item1], prefs[item2], total_people)
+    return 0 if people.empty?
+
+    item1_prefs = prefs[item1]
+    item2_prefs = prefs[item2]
+
+    item_count = (item1_prefs.keys | item2_prefs.keys).size
+    sum = 0.0
+
+    Optimizations.c_similarity(people, people.size, item_count, item1_prefs, item2_prefs)
   end
+
 end
