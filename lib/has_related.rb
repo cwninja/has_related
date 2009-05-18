@@ -63,9 +63,9 @@ module HasRelated
       return all_results
     end
 
-    def dump_dataset(prefs, total_people, klass, &block)
+    def dump_dataset(prefs, klass, &block)
       ensure_data_dir_exists!(klass)
-      dataset = generate_dataset(prefs, total_people, &block)
+      dataset = generate_dataset(prefs, &block)
       write_dataset_to_disk(dataset, klass)
     end
 
