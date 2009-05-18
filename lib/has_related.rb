@@ -33,10 +33,10 @@ module HasRelated
       rankings.map{|_, id| id}
     end
 
-    def similarity(item1, prefs_item1, item2, prefs_item2, people)
+    def similarity(item1, prefs_item1, item2, prefs_item2, people, all_people)
       people.inject(0){|acc, person|
         acc + prefs_item2[person] * prefs_item1[person]
-      }
+      } / all_people.size.to_f
     end
 
     def generate_dataset(prefs, &block)
@@ -49,8 +49,12 @@ module HasRelated
         item1_people = item1_prefs.keys
 
         prefs.each do |item2, item2_prefs|
+          item2_people = item2_prefs.keys
+          common_people = item1_people & item2_people
+          all_people = item1_people | item2_people
+
           unless item1 == item2
-            item_similarity = similarity(item1, item1_prefs, item2, item2_prefs, item1_people & item2_prefs.keys)
+            item_similarity = similarity(item1, item1_prefs, item2, item2_prefs, common_people, all_people)
             agregated_recomendation_map << [item_similarity, item2] if item_similarity > 0
           end
         end
