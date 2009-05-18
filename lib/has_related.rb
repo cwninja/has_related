@@ -16,20 +16,6 @@ module HasRelated
 
   class << self
 
-    def similarity(prefs, item1, item2)
-      people = prefs[item1].keys & prefs[item2].keys
-
-      sum = 0.0
-
-      people.each do |person|
-        prefs1_item = prefs[item1][person] || 0.0
-        prefs2_item = prefs[item2][person] || 0.0
-        sum += prefs2_item * prefs1_item
-      end
-
-      sum / (prefs[item1].keys | prefs[item2].keys).size
-    end
-
     def file_for_class(klass)
       File.join(Rails.root, "db", "similar_items_datasets", klass.to_s.underscore + ".bin")
     end
@@ -39,49 +25,39 @@ module HasRelated
       (item.class.find_all_by_id(ids) || []).sort_by{|item| ids.index(item.id) }.first(count)
     end
 
-    def similar_item_ids(item, count)
-      data = dataset(item.class)
-      all_related_ids = (data[item.id] || []).map{|_, id| id}
-      if count
-        all_related_ids.first(count)
-      else
-        all_related_ids
-      end
+
+    def similar_item_ids(item, count = nil)
+      dataset = similar_items_dataset(item.class.name) || {}
+      rankings = dataset[item.id] || []
+      rankings = rankings.first(count) if count
+      rankings.map{|_, id| id}
     end
 
-    def dataset(klass)
-      @dataset ||= {}
-      return @dataset[klass.to_s] if @dataset[klass.to_s]
-      if File.readable? file_for_class(klass)
-        @dataset[klass.to_s] = Marshal.load(File.open(file_for_class(klass)))
-      else
-        @dataset[klass.to_s] = []
-      end
-    end
-
-    def similar_items_dataset(klass_name)
-      @similar_items_dataset ||= {}
-      return @similar_items_dataset[klass_name] if @similar_items_dataset[klass_name]
-
-      return @similar_items_dataset[klass_name] = {} unless File.readable? file_for_class(klass_name)
-      @similar_items_dataset[klass_name] = Marshal.load(File.open(file_for_class(klass_name)))
+    def similarity(item1, prefs_item1, item2, prefs_item2, people)
+      people.inject(0){|acc, person|
+        acc + prefs_item2[person] * prefs_item1[person]
+      }
     end
 
     def generate_dataset(prefs, &block)
       all_results = {}
       items = prefs.keys
 
-      for item in items
+      prefs.each do |item1, item1_prefs|
         agregated_recomendation_map = []
 
-        items.each do |other|
-          next unless other != item && (item_similarity = similarity(prefs, item, other)) > 0
-          agregated_recomendation_map << [item_similarity, other]
+        item1_people = item1_prefs.keys
+
+        prefs.each do |item2, item2_prefs|
+          unless item1 == item2
+            item_similarity = similarity(item1, item1_prefs, item2, item2_prefs, item1_people & item2_prefs.keys)
+            agregated_recomendation_map << [item_similarity, item2] if item_similarity > 0
+          end
         end
 
-        all_results[item] = agregated_recomendation_map.sort_by{|count, item| -count}.first(16) if agregated_recomendation_map.any?
+        all_results[item1] = agregated_recomendation_map.sort_by{|count, item1| -count}.first(16) if agregated_recomendation_map.any?
 
-        yield [item, agregated_recomendation_map] if block_given?
+        yield [item1, agregated_recomendation_map] if block_given?
       end
 
       return all_results
@@ -102,7 +78,21 @@ module HasRelated
       write_dataset_to_disk(dataset, klass)
     end
 
+    def similar_items_dataset(klass_name)
+      @similar_items_dataset ||= {}
+      return @similar_items_dataset[klass_name] if @similar_items_dataset[klass_name]
+
+      if File.readable? file_for_class(klass_name)
+        @similar_items_dataset[klass_name] = Marshal.load(File.open(file_for_class(klass_name)))
+      else
+        @similar_items_dataset[klass_name] = {}
+      end
+
+      return @similar_items_dataset[klass_name]
+    end
+
   private
+
     def ensure_data_dir_exists!(klass)
       FileUtils.mkdir_p(File.dirname(file_for_class(klass))) unless File.directory? File.dirname(file_for_class(klass))
     end
